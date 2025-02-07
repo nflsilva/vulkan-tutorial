@@ -13,6 +13,8 @@ include_directories("include")
 # Add executable
 add_executable(${PROJECT_NAME} ${SOURCES})
 
+add_subdirectory(vendor/vulkan-sdk)
 add_subdirectory(vendor/glfw)
+add_subdirectory(vendor/glm)
 
-target_link_libraries(${PROJECT_NAME} PRIVATE glfw)
+target_link_libraries(${PROJECT_NAME} PRIVATE vulkan glfw glm)
