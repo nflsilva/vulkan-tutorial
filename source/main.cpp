@@ -4,6 +4,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
+#include <optional>
 #include <stdexcept>
 #include <vector>
 
@@ -50,6 +51,7 @@ private:
     GLFWwindow *m_window = nullptr;
     VkInstance m_instance;
     VkDebugUtilsMessengerEXT m_debugMessenger;
+    VkPhysicalDevice physicalDevice = VK_NULL_HANDLE;
 
     // GLFW
     void initWindow() {
@@ -71,6 +73,7 @@ private:
         return VK_FALSE;
     }
 
+    //// Extensions
     bool areAllSupportedExtensionsAreSuported(const char** glfwExtensions, uint32_t glfwExtensionCount) {
 
         uint32_t extensionCount = 0;
@@ -102,6 +105,21 @@ private:
         return hasAllExtensions;
     }
 
+    std::vector<const char*> getRequiredExtensions() {
+        uint32_t glfwExtensionCount = 0;
+        const char** glfwExtensions;
+        glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+
+        std::vector<const char*> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
+
+        if (enableValidationLayers) {
+            extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+        }
+
+        return extensions;
+    }
+
+    //// Validation Layers
     bool checkValidationLayerSupport() {
         uint32_t layerCount;
         vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
@@ -127,20 +145,6 @@ private:
         return true;
     }
 
-    std::vector<const char*> getRequiredExtensions() {
-        uint32_t glfwExtensionCount = 0;
-        const char** glfwExtensions;
-        glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-
-        std::vector<const char*> extensions(glfwExtensions, glfwExtensions + glfwExtensionCount);
-
-        if (enableValidationLayers) {
-            extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-        }
-
-        return extensions;
-    }
-
     void populateDebugMessengerCreateInfo(VkDebugUtilsMessengerCreateInfoEXT& createInfo) {
         createInfo = {};
         createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
@@ -159,10 +163,9 @@ private:
         if (CreateDebugUtilsMessengerEXT(m_instance, &createInfo, nullptr, &m_debugMessenger) != VK_SUCCESS) {
             throw std::runtime_error("failed to set up debug messenger!");
         }
-
-
     }
 
+    //// Create instance
     void createInstance() {
         // Check for validarion layers
         if (enableValidationLayers && !checkValidationLayerSupport()) {
@@ -213,10 +216,77 @@ private:
 
     }
 
+    //// Physical device & Queues
+    struct QueueFamilyIndices {
+        std::optional<uint32_t> graphicsFamily;
+        bool isComplete() { return graphicsFamily.has_value(); }
+    };
 
+    QueueFamilyIndices findQueueFamiliesForFamily(VkPhysicalDevice device, VkQueueFlagBits familyBit) {
+        QueueFamilyIndices indices;
+
+        uint32_t queueFamilyCount = 0;
+        vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
+
+        std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
+        vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
+
+        int i = 0;
+        for (const auto& queueFamily : queueFamilies) {
+            if (queueFamily.queueFlags & familyBit) {
+                indices.graphicsFamily = i;
+            }
+            i++;
+        }
+
+        return indices;
+    }
+
+    bool isDeviceSuitable(VkPhysicalDevice device) {
+        VkPhysicalDeviceProperties deviceProperties;
+        vkGetPhysicalDeviceProperties(device, &deviceProperties);
+
+        VkPhysicalDeviceFeatures deviceFeatures;
+        vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
+
+        // We consider our application only usable by dedicated graphics cards 
+        // that support geometry shaders
+        return deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU 
+            && deviceFeatures.geometryShader
+            && findQueueFamiliesForFamily(device, VK_QUEUE_GRAPHICS_BIT).isComplete();
+    }
+
+    void pickPhysicalDevice() {
+
+        uint32_t deviceCount = 0;
+        vkEnumeratePhysicalDevices(m_instance, &deviceCount, nullptr);
+        if (deviceCount == 0) {
+            throw std::runtime_error("failed to find GPUs with Vulkan support!");
+        }
+
+        std::vector<VkPhysicalDevice> devices(deviceCount);
+        vkEnumeratePhysicalDevices(m_instance, &deviceCount, devices.data());
+
+        for (const VkPhysicalDevice& device : devices) {
+            if (isDeviceSuitable(device)) {
+                physicalDevice = device;
+                break;
+            }
+        }
+
+        if (physicalDevice == VK_NULL_HANDLE) {
+            throw std::runtime_error("failed to find a suitable GPU!");
+        }
+
+    }
+
+
+
+    // Program
     void initVulkan() {
         createInstance();
         setupDebugMessenger();
+        pickPhysicalDevice();
     }
 
     void mainLoop() {
