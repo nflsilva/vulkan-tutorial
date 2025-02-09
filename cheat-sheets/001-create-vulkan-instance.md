@@ -62,3 +62,8 @@ Therefore, it is used for a lot of operations, such as:
         throw std::runtime_error("failed to create instance!");
     }
 ```
+
+3. **Cleanup**:
+```cpp
+    vkDestroyInstance(m_instance, nullptr);
+```
