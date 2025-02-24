@@ -5,7 +5,7 @@ Validation layers are used to validate Vulkan usage and catch errors in program.
 These should be activated when debugging and disabled on production code.
 
 ## Prerequisites
-- [List of required extensions](./001-supported-required-extensions.md)
+- [List of required extensions](./002-supported-required-extensions.md)
 
 ## Recipe
 1. **Load necessary Vulkan functions**: vkCreateDebugUtilsMessengerEXT used to create debug messenger:
