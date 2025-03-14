@@ -5,6 +5,7 @@
 #include <cstdint> 
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
 #include <iostream>
 #include <limits>
 #include <optional>
@@ -16,7 +17,7 @@ constexpr int32_t WIDTH = 800;
 constexpr int32_t HEIGHT = 600;
 
 const std::vector<const char*> validationLayers = {
-    "VK_LAYER_KHRONOS_validation"
+    //"VK_LAYER_KHRONOS_validation"
 };
 
 const std::vector<const char*> deviceExtensions = {
@@ -28,6 +29,22 @@ const std::vector<const char*> deviceExtensions = {
 #else
     constexpr bool enableValidationLayers = true;
 #endif
+
+static std::vector<char> readFile(const std::string& filename) {
+    std::ifstream file(filename, std::ios::ate | std::ios::binary);
+    if (!file.is_open()) {
+        throw std::runtime_error("failed to open file!");
+    }
+
+    size_t fileSize = (size_t) file.tellg();
+    std::vector<char> buffer(fileSize);
+
+    file.seekg(0);
+    file.read(buffer.data(), fileSize);
+    file.close();
+
+    return buffer;
+}
 
 VkResult CreateDebugUtilsMessengerEXT(VkInstance instance, const VkDebugUtilsMessengerCreateInfoEXT* pCreateInfo, const VkAllocationCallbacks* pAllocator, VkDebugUtilsMessengerEXT* pDebugMessenger) {
     auto func = (PFN_vkCreateDebugUtilsMessengerEXT) vkGetInstanceProcAddr(instance, "vkCreateDebugUtilsMessengerEXT");
@@ -412,7 +429,6 @@ private:
             vkGetPhysicalDeviceSurfacePresentModesKHR(device, m_surface, &presentModeCount, details.presentModes.data());
         }
 
-
         return details;
     }
 
@@ -518,6 +534,97 @@ private:
         }
     }
 
+    //// Pipeline
+
+    // Shaders
+    VkShaderModule createShaderModule(const std::vector<char>& code) {
+        VkShaderModuleCreateInfo createInfo{};
+        createInfo.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+        createInfo.codeSize = code.size();
+        // because we have chars and pCode requires uint32_t
+        createInfo.pCode = reinterpret_cast<const uint32_t*>(code.data());
+
+        VkShaderModule shaderModule;
+        if (vkCreateShaderModule(m_device, &createInfo, nullptr, &shaderModule) != VK_SUCCESS) {
+            throw std::runtime_error("failed to create shader module!");
+        }
+        return shaderModule;
+    }
+
+    void createGraphicsPipeline() {
+
+        // setup vertex and fragment shaders
+        auto vertShaderCode = readFile("../shaders/vert.spv");
+        auto fragShaderCode = readFile("../shaders/frag.spv");
+
+        VkShaderModule vertShaderModule = createShaderModule(vertShaderCode);
+        VkShaderModule fragShaderModule = createShaderModule(fragShaderCode);
+
+        VkPipelineShaderStageCreateInfo vertShaderStageInfo{};
+        vertShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        vertShaderStageInfo.stage = VK_SHADER_STAGE_VERTEX_BIT;
+        vertShaderStageInfo.module = vertShaderModule;
+        vertShaderStageInfo.pName = "main";
+
+        VkPipelineShaderStageCreateInfo fragShaderStageInfo{};
+        fragShaderStageInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+        fragShaderStageInfo.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+        fragShaderStageInfo.module = fragShaderModule;
+        fragShaderStageInfo.pName = "main";
+
+        VkPipelineShaderStageCreateInfo shaderStages[] = {vertShaderStageInfo, fragShaderStageInfo};
+
+        // Vertex Input
+        VkPipelineVertexInputStateCreateInfo vertexInputInfo{};
+        vertexInputInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+        vertexInputInfo.vertexBindingDescriptionCount = 0;
+        vertexInputInfo.pVertexBindingDescriptions = nullptr; // Optional
+        vertexInputInfo.vertexAttributeDescriptionCount = 0;
+        vertexInputInfo.pVertexAttributeDescriptions = nullptr; // Optional
+
+        // Input Assembly
+        VkPipelineInputAssemblyStateCreateInfo inputAssembly{};
+        inputAssembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+        inputAssembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+        inputAssembly.primitiveRestartEnable = VK_FALSE;
+
+        // Dynamic states
+        std::vector<VkDynamicState> dynamicStates = {
+            VK_DYNAMIC_STATE_VIEWPORT,
+            VK_DYNAMIC_STATE_SCISSOR
+        };
+        VkPipelineDynamicStateCreateInfo dynamicState{};
+        dynamicState.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+        dynamicState.dynamicStateCount = static_cast<uint32_t>(dynamicStates.size());
+        dynamicState.pDynamicStates = dynamicStates.data();
+
+        // Viewport & Scissor
+        VkPipelineViewportStateCreateInfo viewportState{};
+        viewportState.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+        viewportState.viewportCount = 1;
+        viewportState.scissorCount = 1;
+
+        VkViewport viewport{};
+        viewport.x = 0.0f;
+        viewport.y = 0.0f;
+        viewport.width = (float) m_swapChainExtent.width;
+        viewport.height = (float) m_swapChainExtent.height;
+        viewport.minDepth = 0.0f;
+        viewport.maxDepth = 1.0f;
+
+        VkRect2D scissor{};
+        scissor.offset = {0, 0};
+        scissor.extent = m_swapChainExtent;
+
+        // Rasterization
+        VkPipelineRasterizationStateCreateInfo rasterizer{};
+        rasterizer.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+        rasterizer.depthClampEnable = VK_FALSE;
+
+        vkDestroyShaderModule(m_device, fragShaderModule, nullptr);
+        vkDestroyShaderModule(m_device, vertShaderModule, nullptr);
+    }
+
     // Program
     void initVulkan() {
         createInstance();
@@ -527,6 +634,7 @@ private:
         createLogicalDevice();
         createSwapChain();
         createImageViews();
+        createGraphicsPipeline();
     }
 
     void mainLoop() {
