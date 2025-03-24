@@ -983,7 +983,7 @@ private:
         vkResetCommandBuffer(m_commandBuffer, 0);
         recordCommandBuffer(m_commandBuffer, imageIndex);
 
-        // Submit!
+        // Submit
         VkSubmitInfo submitInfo{};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
 
@@ -1008,6 +1008,7 @@ private:
             throw std::runtime_error("failed to submit draw command buffer!");
         }
 
+        // Present frame!
         VkPresentInfoKHR presentInfo{};
         presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
 
